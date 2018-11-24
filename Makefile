@@ -1,5 +1,5 @@
 build:
-	./build.sh
+	./findAll/build.sh
 
 deploy:
 	aws lambda update-function-code --function-name HelloServerless \
