@@ -3,42 +3,25 @@ package main
 import (
 	"encoding/json"
 	"net/http"
+	"os"
+
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
+
+	"github.com/aws/aws-sdk-go-v2/aws/external"
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
 )
 
 type Movie struct {
-	ID   int    `json:"id"`
+	ID   string `json:"id"`
 	Name string `json:"name"`
 }
 
 func insert(req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 	var movie Movie
-	movies := []struct {
-		ID   int    `json:"id"`
-		Name string `json:"name"`
-	}{
-		{
-			ID:   1,
-			Name: "Avengers",
-		},
-		{
-			ID:   2,
-			Name: "Ant-Man",
-		},
-		{
-			ID:   3,
-			Name: "Thor",
-		},
-		{
-			ID:   4,
-			Name: "Hulk",
-		}, {
-			ID:   5,
-			Name: "Doctor Strange",
-		},
-	}
+
 	err := json.Unmarshal([]byte(req.Body), &movie)
 
 	if err != nil {
@@ -47,21 +30,41 @@ func insert(req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, 
 			Body:       "Invalid movie payload",
 		}, nil
 	}
-	movies = append(movies, movie)
 
-	response, err := json.Marshal(movies)
+	cfg, err := external.LoadDefaultAWSConfig()
 	if err != nil {
 		return events.APIGatewayProxyResponse{
 			StatusCode: http.StatusInternalServerError,
-			Body:       err.Error(),
+			Body:       "Error while retrieving AWS credentials",
 		}, nil
 	}
+
+	svc := dynamodb.New(cfg)
+	request := svc.PutItemRequest(&dynamodb.PutItemInput{
+		TableName: aws.String(os.Getenv("TABLE")),
+		Item: map[string]dynamodb.AttributeValue{
+			"ID": dynamodb.AttributeValue{
+				S: aws.String(movie.ID),
+			},
+			"Name": dynamodb.AttributeValue{
+				S: aws.String(movie.Name),
+			},
+		},
+	})
+
+	_, err = request.Send()
+	if err != nil {
+		return events.APIGatewayProxyResponse{
+			StatusCode: http.StatusInternalServerError,
+			Body:       "Error while inserting moving into DynamoDB",
+		}, nil
+	}
+
 	return events.APIGatewayProxyResponse{
 		StatusCode: http.StatusOK,
 		Headers: map[string]string{
 			"Content-Type": "application/json",
 		},
-		Body: string(response),
 	}, nil
 }
 
