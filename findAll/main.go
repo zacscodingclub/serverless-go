@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"os"
+	"strconv"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/aws/external"
@@ -18,7 +19,15 @@ type Movie struct {
 	Name string
 }
 
-func findAll() (events.APIGatewayProxyResponse, error) {
+func findAll(request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+	size, err := strconv.Atoi(request.Headers["Count"])
+	if err != nil {
+		return events.APIGatewayProxyResponse{
+			StatusCode: http.StatusBadRequest,
+			Body:       "Count Header should be a number",
+		}, nil
+	}
+
 	cfg, err := external.LoadDefaultAWSConfig()
 	if err != nil {
 		return events.APIGatewayProxyResponse{
@@ -30,6 +39,7 @@ func findAll() (events.APIGatewayProxyResponse, error) {
 	svc := dynamodb.New(cfg)
 	req := svc.ScanRequest(&dynamodb.ScanInput{
 		TableName: aws.String(os.Getenv("TABLE")),
+		Limit:     aws.Int64(int64(size)),
 	})
 	res, err := req.Send()
 	if err != nil {
